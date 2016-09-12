@@ -1,0 +1,114 @@
+%Q1
+hors(salade).
+hors(pate).
+poisson(sole).
+poisson(thon).
+viande(porc).
+viande(boeuf).
+dessert(glace).
+dessert(fruit).
+
+valeur(salade,1).
+valeur(pate,6).
+valeur(sole,2).
+valeur(thon,4).
+valeur(porc, 7).
+valeur(glace,5).
+valeur(fruit,1).
+
+plat(P) :- (poisson(P); viande(P)).
+
+repas(H,P,D) :- hors(H), plat(P), dessert(D).
+repasLeger(H,P,D,Total) :- hors(H), plat(P), dessert(D),  valeur(H,X), valeur(P,Y), valeur(D,Z),  Total is (X+Y+Z), Total<10.
+
+
+
+%Q2
+un_sur_deux([],[]).
+un_sur_deux([_], T2):- un_sur_deux([],T2).
+un_sur_deux([_,H|T], [H|T2]) :- un_sur_deux(T, T2).
+
+%Q3
+
+ajouter([],L,L).
+ajouter([H|T], Valeur, [H|L3]) :- ajouter(T, Valeur, L3).
+
+
+
+%retirer(Valeur, [Valeur|T], PreV,Output):- ajouter(PreV, T, Output).
+
+%retirer(Valeur, [V|T], PreV, Output):- ajouter([V],PreV, X),
+%retirer(Valeur, T, X, Output) .
+retirer(_, [], []).
+retirer(A, [A|T], T).
+retirer(A, [H|T], [H|T2]) :- (A \= H), retirer(A, T, T2).
+
+%retirer_all
+retirerAll(_, [], []).
+retirerAll(A, [A|T], T2):-retirerAll(A, T, T2).
+retirerAll(A, [H|T], [H|T2]) :- (A \= H), retirerAll(A, T, T2).
+
+duplicateN(_, [],[],_).
+duplicateN(V,[A|T] ,[A,A|T] ,V).
+duplicateN(V, [H|T], [H|T2], Length):- (V\=Length), Length2 is Length+1, duplicateN(V, T, T2, Length2).
+
+
+gerer_commande(1, Valeur, Liste, Output):-
+	ajouter(Liste, [Valeur] ,  Output).
+
+gerer_commande(2, Valeur, Liste, Output):-
+	retirer(Valeur, Liste , Output).
+
+gerer_commande(3, Valeur, Liste, Output):-
+	retirerAll(Valeur, Liste , Output).
+
+gerer_commande(4, Valeur, Liste, Output):-
+	duplicateN(Valeur, Liste , Output, 1).
+
+%gerer_liste(Liste,Output).
+gerer_liste([], Output, Output).
+gerer_liste([Commande, Valeur| Tail], Liste, Output) :- gerer_commande(Commande, Valeur, Liste, New), gerer_liste(Tail, New, Output).
+
+
+
+%Q4
+%
+ensure_loaded(set).
+
+actionsPossibles(Env, R) :- findall(Action, action(Env, Action), R).
+
+
+action(Env, move(B,X,Y)):- move(B,X,Y,Env).
+action(Env, moveToTable(B,X)):- moveToTable(B,X,Env).
+
+move(B, X, Y, Env) :-
+	member_set(clear(B), Env),
+	member_set(clear(Y), Env),
+	B\=X, B\=Y, X\=Y,
+	member_set(on(B,X), Env),
+	member_set(block(B), Env),
+	member_set(block(Y), Env).
+
+
+moveToTable(B, X, Env) :-
+	member_set(clear(B), Env),
+	member_set(on(B,X), Env),
+	member_set(block(B), Env),
+	B\=X, X\=table.
+
+
+%Q5
+%
+resolveAction(State, move(B,X,Y), NextState):-
+	add_in_set(on(B,Y),State, N1),
+	(X\=table, add_in_set(clear(X),N1,N2)),
+	delete_in_set( on(B,X),N2, N3),
+	delete_in_set(clear(Y), N3,NextState).
+
+resolveAction(State, moveToTable(B,X),NextState):-
+	add_in_set(on(B,table),State,N1),
+	add_in_set(clear(X),N1, N2),
+	delete_in_set(on(B,X),N2,NextState).
+
+updateState(State, State).
+etatSuccesseur(State, Action, NextState) :- resolveAction(State, Action, NextState). %, updateState(State, NextState).
