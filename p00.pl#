@@ -16,14 +16,12 @@
 %-----------------------------------------------------------------------------
 
 % Nom du JI: p00_nom(-Nom)
-p00_nom('Blitzcraig').
+p00_nom('Lad').
 
 % Auteurs du JI: p00_auteurs(-Auteurs)
-p00_auteurs('Etienne et Maxime').
+p00_auteurs('Etienne et Max').
 
 % Remise � zero du JI: p00_reset
-
-%  TO IMPLEMENT
 p00_reset :-
     planInitial(P),
     setPlan(P).
@@ -33,14 +31,8 @@ p00_plan(Plan) :-
     getPlan(Plan).
 
 % Prochaine action du JI: p00_action(+Etat, -Action)
-% To IMPLEMENT
 p00_action(Etat, Action) :-
-    parseSate(Etat).
-    %Re-evaluate state
-	
     trouveAction(Etat, Action).
-
-parseState([NPlayers, Nblocs, NCols, NRows,PlayerStates,   ]
 
 %-----------------------------------------------------------------------------
 % Pr�dicats internes de plans.
@@ -76,5 +68,84 @@ changePlan(Plan) :-
 trouveAction(EtatJeu, ProchaineAction) :-
     getPlan([ProchaineAction]), !, planInitial(P), setPlan(P).
 
-trouveAction(EtatJeu, ProchaineAction) :-
-    getPlan([ProchaineAction|PlanRestant]), setPlan(PlanRestant).
+
+trouveAction(EtatJeu, ProchaineAction) :-    getPlan([ProchaineAction|PlanRestant]), setPlan(PlanRestant).
+
+
+move(Direction).
+take(Direction).
+drop(Direction).
+attack(Direction).
+none().
+
+getJoueur([_,_,_,_,Joueurs|_], Joueur) :- p00_nom(Nom),  member_set([N,Nom,X,Y,Z], Joueurs), append([],[N,Nom,X,Y,Z], Joueur).
+
+clear([_, _, NCols, NRows,Joueurs, Blocs], X,Y) :-
+	\+member_set([_,_,X,Y,_], Joueurs),
+	\+member_set([_,X,Y], Blocs),
+	X<NCols,
+	Y<NRows,
+	X>=0,
+	Y>=0.
+
+block([_, _,NCols,NRows,_, Blocs], X,Y) :-
+	member_set([_,X,Y], Blocs),
+	X<NCols,
+	Y<NRows,
+	X>=0,
+	Y>=0.
+hasBlock([_,_,_,_,Block]):- Block >0.
+
+playerOn([_, _,_,_,Joueurs, _], X,Y) :-
+	member_set([_,_,X,Y,_], Joueurs).
+
+
+validateMove(State,Direction):- getJoueur(State,Joueur), position(State, Joueur, Direction, X,Y), clear(State,X,Y).
+validateTake(State,Direction):- getJoueur(State,Joueur), position(State, Joueur, Direction, X,Y), block(State,X,Y).
+validateDrop(State, Direction):- getJoueur(State,Joueur), position(State, Joueur, Direction, X,Y), hasBlock(Joueur), clear(State,X,Y).
+validateAttack(State, Direction):-getJoueur(State,Joueur), position(State, Joueur, Direction, X,Y), playerOn(State, X,Y).
+
+action(State, move(Direction)) :- validateMove(State,Direction).
+action(State, take(Direction)) :- validateTake(State,Direction).
+action(State, drop(Direction)) :- validateDrop(State,Direction).
+action(State, attack(Direction)) :- validateAttack(State,Direction).
+action(_, none()).
+
+getPosition(1, X,Y, X1,Y1):- X1 is X , Y1 is Y+1.
+getPosition(2, X,Y, X1,Y1):- X1 is X+1 , Y1 is Y.
+getPosition(3, X,Y, X1,Y1):- X1 is X , Y1 is Y-1.
+getPosition(4, X,Y, X1,Y1):- X1 is X-1 , Y1 is Y.
+getPosition(5, X,Y, X1,Y1):- X1 is X+1, Y1 is Y+1.
+getPosition(6, X,Y, X1,Y1):- X1 is X +1, Y1 is Y-1.
+getPosition(7, X,Y, X1,Y1):- X1 is X-1, Y1 is Y-1.
+getPosition(8, X,Y, X1,Y1):- X1 is X-1, Y1 is Y+1.
+
+%position_valid(State, X, Y, Valid):-member_set
+position(State,[_,_,X1,Y1,_], Direction, X,Y):- getPosition(Direction, X1,Y1, X,Y).
+
+%clear(Direction) :-
+
+%move(Direction)_:-  member_set()
+%
+
+getAvailableActions(State, Actions):- findall(Action, action(State, Action), Actions).
+
+chooseNextSteps(State, Steps):- getAvailableActions(State, Actions), evaluateActions(State, Actions, Steps).
+
+evaluateActions(State, [Action|T] , Steps) :- evaluateActions(State, T,Steps), resolveAction(State, Action, NextState), evaluateState(NextState, Value), 
+
+
+state([4,3,4,4,
+[[2,'Lad',0,2,3],[3,'Zouf',1,3,2],[1,'Ares',3,0,0],
+[4,'Buddy',2,2,0]],[[1,1,3],[2,0,1]]]).
+
+state2([4,3,4,4,
+[[2,'Lad',0,2,3],[3,'Zouf',1,0,0],[1,'Ares',3,0,0],
+[4,'Buddy',2,2,0]],[[1,1,3],[3,3,2],[2,0,1]]]).
+
+
+joueurs([[2,'Lad',0,2,0],[3,'Zouf',1,0,0],[1,'Ares',3,0,0],
+[4,'Buddy',2,2,0]]).
+
+
+%joueur(X) :- joueurs(X,_,__)
