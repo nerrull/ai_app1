@@ -64,15 +64,20 @@ changePlan(Plan) :-
 % Pr�dicats internes d'action
 %-----------------------------------------------------------------------------
 %-----------------------------------------------------------------------------
-move(Direction).
-take(Direction).
-drop(Direction).
-attack(Direction).
+% +Direction
+move(_).
+% +Direction
+take(_).
+% +Direction
+drop(_).
+% +Direction
+attack(_).
+% None
 none().
 
 getJoueur([_,_,_,_,Joueurs|_], Joueur) :-  getJoueurFrom(Joueurs, Joueur).
 getJoueurFrom(Joueurs, Joueur) :- p00_nom(Nom),  member_set([N,Nom,X,Y,Z], Joueurs), append([],[N,Nom,X,Y,Z], Joueur).
-
+getJoueurFromPosition(Joueurs, X, Y, Joueur):- member_set([N,Nom,X,Y,Z], Joueurs), append([],[N,Nom,X,Y,Z], Joueur).
 
 clear([_, _, NCols, NRows,Joueurs, Blocs], X,Y) :-
 	\+member_set([_,_,X,Y,_], Joueurs),
@@ -130,9 +135,13 @@ dropBlock(Blocks,0,_,_,Blocks).
 
 acquireBlock(Players, Blocks, [N,Name,X,Y,PlayerBlock], BlockX,BlockY, ResultingPlayers, ResultingBlocks):-
 	member_set([Value,BlockX,BlockY],Blocks),
+	delete_in_set([_,BlockX,BlockY],Blocks,TBlocks),
 	add_in_set([N,Name,X,Y,Value],Players,ResultingPlayers),
-	dropBlock(Blocks, PlayerBlock, BlockX, BlockY, ResultingBlocks).
+	dropBlock(TBlocks, PlayerBlock, BlockX, BlockY, ResultingBlocks).
 
+stealBlock(Players, [PN, PName, PX, PY, PB], [VN, VName, VX, VY, VB], ResultingPlayers):-
+	add_in_set([PN,PName,PX,PY,VB], Players, T1),
+	add_in_set([VN,VName,VX,VY,PB], T1, ResultingPlayers).
 
 applyAction([A,B,C,D,Players,E], move(Dir), [A,B,C,D,ResultingPlayers,E]):-
 	getJoueurFrom(Players,Player),
@@ -146,8 +155,23 @@ applyAction([A,B,C,D,Players,Blocks], take(Dir), [A,B,C,D,ResultingPlayers,Resul
 	position(Player,Dir,X,Y),
 	acquireBlock(T1,Blocks, Player, X, Y, ResultingPlayers,ResultingBlocks).
 
+applyAction([A,B,C,D,Players,Blocks], drop(Dir), [A,B,C,D,ResultingPlayers,ResultingBlocks]):-
+	getJoueurFrom(Players,Player),
+	delete_in_set(Player,Players,T1),
+	position(Player,Dir,X,Y),
+	[PN,PName,PX,PY,V] = Player,
+	dropBlock(Blocks,V, X,Y, ResultingBlocks),
+        add_in_set([PN,PName,PX,PY,0], T1, ResultingPlayers).
 
+applyAction([A,B,C,D,Players,E], attack(Dir), [A,B,C,D,ResultingPlayers,E]):-
+	getJoueurFrom(Players,Player),
+	delete_in_set(Player,Players,T1),
+	position(Player,Dir,X,Y),
+	getJoueurFromPosition(Players, X, Y, Victim),
+	delete_in_set(Victim, T1, T2),
+	stealBlock(T2, Player, Victim, ResultingPlayers).
 
+applyAction(State, none(), State).
 
 % -----------------------------
 % Utils
@@ -155,89 +179,84 @@ applyAction([A,B,C,D,Players,Blocks], take(Dir), [A,B,C,D,ResultingPlayers,Resul
 
 getBestFreeBlock([],_, Block,Block).
 
-getBestFreeBlock([[Value, PosX, PosY]|T],BestVal, TBlock, Block) :-(Value >= BestVal, NextVal is Value, getBestBlock(T, NextVal, [Value, PosX, PosY], Block) ; Value < BestVal, getBestBlock(T,BestVal,TBlock,Block)) .
+getBestFreeBlock([[Value, PosX, PosY]|T],BestVal, TBlock, Block) :-
+	(Value >= BestVal, NextVal is Value,
+	getBestFreeBlock(T, NextVal, [Value, PosX, PosY], Block) ;
+	Value < BestVal,
+	getBestFreeBlock(T,BestVal,TBlock,Block)) .
 
 getBestPlayerBlock([], _, Player, Player).
 
 getBestPlayerBlock([[PNumber, PName, PosX, PosY, BlockVal]|T], BestVal, TPlayer,Player):-
-	p00_nom(Name),
-	Name \= PName,
-	( BlockVal >= BestVal, NextVal is BlockVal, getBestPlayerBlock(T, NextVal,[PNumber, PName, PosX, PosY, BlockVal], Player);
-	 BlockVal < BestVal, getBestPlayerBlock(T, BestVal, TPlayer, Player)).
+	(p00_nom(Name),
+	 Name == PName,
+	 getBestPlayerBlock(T, BestVal, TPlayer, Player);
+	 BlockVal >= BestVal, NextVal is BlockVal,
+	 getBestPlayerBlock(T, NextVal,[PNumber, PName, PosX, PosY, BlockVal], Player);
+	 BlockVal < BestVal,
+	 getBestPlayerBlock(T, BestVal, TPlayer, Player)).
 
 getBestBlockValue([_,NBlocks|_], NBlocks).
 
 % ---------------------------------------
 % Heuristics things
 % --------------------------------------
-getRunningHeuristic(PosX, PosY, Joueurs, 100).
-getDistanceHeuristic().
+%
+%
+getRunningHeuristic(_, _, [], Sum, Sum).
+getRunningHeuristic(PosX, PosY, [Player|NextPlayers], Sum, RetVal):-
+	[_,_, PX, PY, PV] = Player,
+        TempRet is Sum + floor(sqrt( abs(PosX-PX)^2 + abs(PosY- PY)^2))*PV,
+	getRunningHeuristic(PosX, PosY, NextPlayers, TempRet, RetVal).
 
 
 
-calculateHeuristic([_,_,PosX,PosY, PBlock], [BlockVal, BlockX, BlockY], [_,_,PlayerX, PlayerY, PBlock],Joueurs, RetVal):-
+getDistanceHeuristic(PosX, PosY, GX,  GY, RetVal):-
+	RetVal is floor(sqrt( abs(PosX-GX)^2 + abs(PosY- GY)^2)).
+
+
+
+calculateHeuristic([_,_,PosX,PosY, MyBlock], [BlockVal, BlockX, BlockY], [_,_,PlayerX, PlayerY, PBlock],Joueurs, RetVal):-
 	%Already have best block
-	((MyBlock >PBlock, MyBlock > BlockVal,
-	  getRunningHeuristic(PosX,PosY, Joueurs, RetVal)) ;
+	(MyBlock >PBlock, MyBlock > BlockVal,
+	 % getRunningHeuristic(PosX,PosY, Joueurs,0, Val),
+	RetVal is 1;
 
 	%Best block on
 	(MyBlock < BlockVal, PBlock<BlockVal,
-	getDistanceHeuristic(PosX, PosY, BlockX,BlockY));
+	getDistanceHeuristic(PosX, PosY, BlockX,BlockY, RetVal));
 
 	%Best block on player
 	(MyBlock <PBlock, PBlock>BlockVal,
-	getDistanceHeuristic(PosX, PosY, PlayerX,PlayerY))).
+	getDistanceHeuristic(PosX, PosY, PlayerX,PlayerY, RetVal))).
 
-
-
-
-evaluateState([NPlayers,NBlocs, NCols,NRows, Joueurs, Blocks ], ReturnVal) :-
-
+evaluateState([_,_,_,_, Joueurs, Blocks ], RetVal) :-
 	getJoueurFrom(Joueurs, Joueur),
 	getBestFreeBlock(Blocks,0,_,Block),
 	getBestPlayerBlock(Joueurs,0,_,Player),
 	calculateHeuristic(Joueur, Block, Player, Joueurs, RetVal).
 
-
-evaluateActions(State, [Action|T] , Steps).
-	%resolveAction(State, Action, NextState),
-	%evaluateState(NextState, Value),
-	%Push to queue(Action, Value), evaluateActions(NextState, T,Steps).
-
-
-
 planEscape(State, ProchaineAction):-
-	getPossibleActions(State, Actions),
-	evaluateActions(State, Actions, ProchaineAction, run).
+	getAvailableActions(State, Actions ),
+	prioritize(0, State, [], Actions, _,[BestNode|_]),
+	[_, _, _,ProchaineAction] = BestNode.
 
 
 hasBestBlock([_,NBlocks,_,_,Joueurs,_]):-
-	getJoueur(State,[_,_,_,_,Value]),
+	getJoueurFrom(Joueurs,[_,_,_,_,Value]),
 	NBlocks = Value.
-
-planAcquireBlock( State, _, Goal):- member_set(State,Goal).
-
-planAcquireBlock( State, ProchaineAction, Goal):-
-       getPossibleActions(State,Actions),
-       hasBestBlock(State).
-
-
 
 % -------------------
 % Main call
 % -------------------
-trouveAction(EtatJeu, ProchaineAction) :-
-    getPlan([ProchaineAction]), !, planInitial(P), setPlan(P).
+trouveAction(State, ProchaineAction, Plan) :-
+	( hasBestBlock(State),
+	  planEscape(State, ProchaineAction);
 
-
-
-trouveAction(EtatJeu, ProchaineAction) :-
-	( hasBlock(EtatJeu),
-	  planEscape(EtatJeu, ProchaineAction) ;
-	  \+hasBlock(EtatJeu),
+	  \+hasBestBlock(State),
 	  p00_nom(Name), getBestBlockValue(State,BestBlock),
-	  astar(EtatJeu,[_,Name,_,_,BestBlock],Plan),
-	  changePlan(plan),
+	  astar(State,[_,Name,_,_,BestBlock],Plan),
+	  changePlan(Plan),
 	  getPlan([ProchaineAction|PlanRestant]),
 	  setPlan(PlanRestant)
 	).
@@ -247,11 +266,11 @@ trouveAction(EtatJeu, ProchaineAction) :-
 % ----------------------------------------------
 
 state([4,3,4,4,
-[[2,'Lad',0,2,3],[3,'Zouf',1,3,2],[1,'Ares',3,0,0],
+[[2,'Lad',0,2,3],[3,'Zouf',1,3,0],[1,'Ares',3,0,0],
 [4,'Buddy',2,2,0]],[[1,1,3],[2,0,1]]]).
 
 state2([4,3,4,4,
-[[2,'Lad',0,2,3],[3,'Zouf',1,0,0],[1,'Ares',3,0,0],
+[[2,'Lad',0,2,0],[3,'Zouf',1,0,0],[1,'Ares',3,0,0],
 [4,'Buddy',2,2,0]],[[1,1,3],[3,3,2],[2,0,1]]]).
 
 
@@ -268,7 +287,7 @@ blocs([[1,1,3],[3,3,2],[2,0,1]]).
 % Expand the selected node.
 % +Node, +PriorityQueue, -UpdatedPriorityQueue
 expand([State, _, CurrentCost, Path],  PQ, NewPQ):-
-	getPossibleActions(State, Actions),
+	getAvailableActions(State, Actions),
 	prioritize(CurrentCost, State, Path, Actions,PQ, NewPQ).
 
 % Internal logic of "expand".
@@ -282,11 +301,12 @@ prioritize(CurrentCost, CurrentState, Path, [Action|RemainingActions], PQ, PQOut
 	NewEstimatedCost is CurrentCost+ ActionCost + Heuristic,
 	TravelCost is CurrentCost + ActionCost,
 	append(Path,[Action], NPath),
-	insert_pq([Action, NewEstimatedCost, TravelCost, NPath], PQ, PQNew ),
+	insert_pq([ResultingState, NewEstimatedCost, TravelCost, NPath], PQ, PQNew ),
 	prioritize(CurrentCost, CurrentState, Path, RemainingActions, PQNew,PQOut).
 
 % +InitialNode, +Goal, +CurrentPQ, -Path
-findGoal([State,_,_,Path], Goal,_, Path):- member_set(Goal,State).
+findGoal([[_,_,_,_,Players,_],_,_,Path], Goal,_, Path):- member_set(Goal,Players), !.
+
 findGoal(InitNode, Goal, PQ, Out):-
 	expand(InitNode, PQ, [Node|NextPQ]),
 	findGoal(Node, Goal, NextPQ, Out).
@@ -295,11 +315,12 @@ findGoal(InitNode, Goal, PQ, Out):-
 % ------------------------
 % Case specific code
 computeH(State,H):-
-	evaluateState(ResultingState,H).
+	evaluateState(State,H).
 
-computeG(State, Dest, G):- G is 1.
+% +State, +Action, -Cost
+computeG(_, _, G):- G is 1.
 
-astar(Origin, Destination, R):-findGoal([Origin, 0, 0, []], Destination, PQ, R).
+astar(InitialState, GoalState, R):-findGoal([InitialState, 0, 0, []], GoalState, _, R).
 
 
 
